@@ -1,0 +1,606 @@
+---
+title: "<center>**Availability of Wild Edible Plants**</center>"
+author: "<center>Wyclife Agumba Oluoch & Cory W. Whitney</center>"
+bibliography: 
+  - bib/packages.bib
+  - bib/articles.bib
+nocite: '@*'
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(base); library(knitr); library(tidyverse); library(rstanarm); library(patchwork)
+library(bayestestR); library(usdm); library(corrplot); library(report); library(jtools)
+library(rstantools)
+
+knitr::write_bib(c(.packages(),
+                   'base', 'knitr', 'tidyverse', 'rstanarm',
+                   'bayestestR', 'usdm', 'corrplot'),
+                 'bib/packages.bib')
+```
+
+# Versions of platforms and packages
+
+```{r versions}
+# The latest version of the repo ran successfully on:
+# R           version 4.2.1 
+# RStudio     version 2022.02.3 Build 492
+# knitr       version 1.39
+# tidyverse   version 1.3.1
+# rstanarm    version 2.21.3
+# bayestestR  version 0.12.1
+# usdm        version 1.1.18
+# corrplot    version 0.92
+# jtools      version 2.2.0
+```
+
+# Introduction
+
+Here we use data from three focus group discussions (FGDs) in three community units (Nasiger, Atala Kamusio, and Lopur) of Turkana County in northwestern Kenya to assess contribution of various factors on the perception of availability of wild edible plants (WEPs). We use the term availability to refer to the ease by which communities perceive access, acquisition, processing, and use WEPs for food. In that respect, we used the following measurements to assess availability:
+
+-   abundance (1 = Plenty, 2 = Average, 3 = Little),
+-   distance (1 = Near, 2 = Average, 3 = Far),
+-   harvesting (1 = Easy, 2 = Average, 3 = Hard),
+-   portability (1 = Light, 2 = Average, 3 = Heavy),
+-   processing (1 = Easy, 2 = Average, 3 = Hard),
+-   season (1 = Both dry and wet, 2 = Dry, 3 = Wet),
+-   market (1 = Plenty, 2 = Average, 3 = Little),
+-   price (1 = Cheap, 2 = Average, 3 = Expensive),
+-   access (1 = Free, 2 = With permission, 3 = No access),
+-   adequacy (1 = Plenty, 2 = Average, 3 = Little), and
+-   regeneration (1 = Plenty, 2 = Average, 3 = Little).
+
+We then asked the participants to state whether they consider each of the ranked WEPs as available or not (1 = Yes, 0 = No). This was the response/target/dependent variable to be assessed in our subsequent model building together with the rankings of predictor variables.
+
+We then built a model using Bayesian modeling method to reveal important variables informing availability of WEPs in northwestern Kenya. We used the `stan_glm` function from the `rstanarm` library to run Bayesian generalized linear model [@R-rstanarm].
+
+We ran all analyses in the `R` programming environment [@R-base].
+
+# Loading and preparing FGD data
+
+We read our FGD data into `R` using `read.csv` function in base `R` [@R-base].
+
+```{r load_data, include = FALSE}
+wep_data <- read.csv('data/wep_availability.csv') 
+```
+
+# Exploring the data
+
+Since each of our `r ncol(wep_data[,3:13])` predictor variables could possibly be ranked in up to three categorical levels, we sought to check how balanced the frequency of each level is represented in the response variable. This is a necessary step because levels underrepresented or completely not represented in the response variable may give unstable model results.
+
+```{r explore_data_balance}
+wep_data[,3:14] |> gather(key = parameter, value = rank, -AVAILABILITY) |> 
+  group_by(AVAILABILITY, parameter, rank) |> 
+  ggplot() + 
+  geom_bar(aes(x = factor(rank), fill = factor(AVAILABILITY)), position = 'stack') + 
+  facet_wrap(~parameter, scales = 'free_y') +
+  guides(fill = guide_legend(title = "Availability")) +
+  xlab('The three parameter levels') + ylab('Level frequency') +
+  theme_classic() +
+  theme(text = element_text(size = 12, color = 'black', face = 'bold')) +
+  theme(legend.position = c(0.9, 0.15))
+```
+
+From the exploratory plot, we realize that `Access` variable was ranked only at `r length(table(wep_data$Access))` levels. Further, the second level is only having `r table(wep_data$Access)[[2]]` record. This shows that two FGDs reported the variable to be at level 1 (free access) hence its other levels (with permission and no access) may not be useful in building our model. In addition to the above, we notice that Abundance variable has level 1 (Plenty) only corresponding to Availability == YES level in the response variable. This means that there was no single WEP that was ranked as plenty and not available at the same time. Even though that makes sense, it is a phenomenon that may destabilize the regression model when used for prediction on data with more heterogeneity in the levels. The same applies to Seasonality variable that has only unavailable for its 3rd level. Good variables should be having almost same representation on the response variable levels of its own levels.
+
+We subset the data to capture only variables to be used in building regression models, we left out `SITE` and `SPECIES` columns because we only wanted to test for the effect of 11 predictor variables. Actually, the species column serves no purpose in this modeling framework except to give the ready idea on the species being studied. For site, however, once can subset the data for each site and run site specific models.
+
+```{r availability_data}
+regression_data_factors <- wep_data %>% dplyr::select(Abundance:AVAILABILITY)
+```
+
+Subsequently, we tested for multi-collinearity in this specific subset of the data (except for the response column (AVAILABILITY)) using `vifcor` function in `usdm` package [@usdm2014] version `r packageVersion('usdm')`. Multi-collinearity is problematic for our Bayesian regression modelling approach since we use region of practical equivalence (ROPE) as a main diagnostic. The ROPE indicates a **'practically no effect'** region of the posterior distributions. It is the range where the posterior distribution tend to be ***equivalent to null***.
+
+```{r availability_vifcor}
+availability_vifcor <- regression_data_factors %>% dplyr::select(-AVAILABILITY) %>% vifcor(th = 0.7) # Set threshold of 0.7 (the default)
+availability_vifcor
+```
+
+We found `r length(availability_vifcor@excluded)` variables, `r availability_vifcor@excluded[[1]]` and `r availability_vifcor@excluded[[2]]`, to have multi-collinearity problems and we left them out of the modeling framework.
+
+To visualize the correlation values among the predictor variables, we used `corrplot` function from `corrplot` package [@R-corrplot] version `r packageVersion('corrplot')` on correlation matrix object of our predictor variables generated by `cor` function in base `R` [@R-base].
+
+```{r availability_corrplot_before}
+cor_matrix <- regression_data_factors %>% dplyr::select(-AVAILABILITY) %>% cor()
+corrplot(cor_matrix, method = 'square', diag = FALSE, 
+         addCoef.col = 'black', number.cex = 0.9,  type = 'lower')
+```
+
+None of the remaining variables had correlations \>= \|0.7\| as indicated in the following plot.
+
+```{r availability_corrplot_after}
+cor_matrix_cleaned <- regression_data_factors |>  
+  dplyr::select(-c(availability_vifcor@excluded, AVAILABILITY)) |> cor()
+
+corrplot(cor_matrix_cleaned, method = 'square', diag = FALSE, 
+         addCoef.col = 'black', number.cex = 0.9,  type = 'lower')
+```
+
+In preparation for the data to run `stan_glm`, we converted both predictor and response variables into factors so that the function could run them as categories and not numeric. I have set **Access** variable to only two levels as that is what is available in the data-set.
+
+```{r}
+avail_glm <- regression_data_factors |> dplyr::select(-c(availability_vifcor@excluded))
+avail_glm$Distance <- factor(avail_glm$Distance, labels = c('_Near', '_Average', "_Far"))
+avail_glm$Harvesting <- factor(avail_glm$Harvesting, labels = c('_Easy', '_Average', "_Hard"))
+avail_glm$Portability <- factor(avail_glm$Portability, labels = c('_Light', '_Average', "_Heavy"))
+avail_glm$Processing <- factor(avail_glm$Processing, labels = c('_Easy', '_Average', "_Hard"))
+avail_glm$Seasonality <- factor(avail_glm$Seasonality, labels = c('_Both', '_Dry', "_Wet"))
+avail_glm$Price <- factor(avail_glm$Price, labels = c('_Cheap', '_Average', "_Expensive"))
+avail_glm$Access <- factor(avail_glm$Access, labels = c('_Free', '_Permission'))
+avail_glm$Adequacy <- factor(avail_glm$Adequacy, labels = c('_Plenty', '_Average', "_Little"))
+avail_glm$Regeneration <- factor(avail_glm$Regeneration, labels = c('_Plenty', '_Average', "_Little"))
+avail_glm$AVAILABILITY <- factor(avail_glm$AVAILABILITY, labels = c('_YES', '_NO'))
+```
+
+# Fitting the regression model
+
+We start by fitting a frequentist version of the GLM model, to give ourselves a reference point. We use the `glm` function from the `stats` package. We applied `rstanarm` optional prior distributions for the coefficients, intercept, and auxiliary parameters. The default priors are described in the vignette [Prior Distributions for rstanarm Models](http://mc-stan.org/rstanarm/articles/priors.html).
+
+```{r glm_frequentist}
+model_glm <- glm(AVAILABILITY ~., data = avail_glm, family = binomial) 
+# we cannot have factor/categorical response variables.
+# To do a logistic regression the function changed AVAILABILITY to 0 and 1 (could also be FALSE and TRUE) and use family = binomial
+summary(model_glm)
+```
+
+When dealing with factor variables, the Generalized Linear Model (GLM `glm`) will always use n-1 interactions. For example `Access_Easy` (access is easy) is the baseline and `Access_Permission` (access is with permission) will only be used if the `Access` variable = `Access_Permission` (access is with permission). In this model the 'baseline' is the top level of each factor. So the baseline is easy access, harvesting, processing etc. and for plants whose fruits mature across all seasons (`Seasonality_Both`).
+
+The `Coefficient Estimate` in the output indicates the average change in the log odds of the response variable associated with a one unit increase in each predictor variable.
+
+For example, a one unit increase in the predictor variable `Distance_Far` is associated with an average change of -54.969 in the log odds of the response variable `AVAILABILITY` taking on a value of 1. This means that higher values of `Distance_Far` are associated with a lesser likelihood of `AVAILABILITY` taking on a value of 1. i.e. when WEPs are further away they are less likely to be considered available within the study communities.
+
+Standard error `Std. Error` indicates the variability associated with the coefficient estimate. We then divide the coefficient estimate by the standard error to obtain a `z value`, e.g. the `z value` for the predictor variable `Distance_Average` is -52.788 / 77788.868 = -0.001 (rounded to 3 decimal places).
+
+The p-value `Pr(>|z|)` indicates the probability associated with a particular `z value` as a measure of the performance of each predictor variable in predicting the value of the response variable in the model.
+
+The `null deviance` indicates how well the response variable can be predicted by a model with only an intercept term. The `residual deviance` indicates how well the response variable can be predicted by the specific model that we fit with predictor variables. The lower the value, the better the model is able to predict the value of the response variable.
+
+The Akaike information criterion (`AIC`) is a metric to compare the fit of different regression models - it indicates how likely the model is, given the data. The lower the value the better the regression model is able to fit the data. `AIC = 2K – 2ln(L)` where: `K` is the number of model parameters and `ln(L)` is the log-likelihood of the model.
+
+# Bayesian model
+
+```{r stan_glm}
+set.seed(123)
+model_availability <-
+  rstanarm::stan_glm(formula = (AVAILABILITY ~ .), 
+                     family = 'binomial',
+                     data = avail_glm, 
+                     prior = default_prior_coef(family))
+# The prior distribution for the regression coefficients. The default priors in rstanarm are intended to be weakly informative / provide moderate regularization / help stabilize computation
+```
+
+## Assess model convergence
+
+Here we assess model convergence by visually examining the trace plots.
+
+```{r model_convergence}
+plot(model_availability, plotfun = "trace")
+```
+
+The trace plots indicate that our model converges with no major gaps and values generally in agreement.
+
+Next we can look at the summary output of the Bayesian model.
+
+```{r stan_glm_summary}
+summary(model_availability)
+```
+
+The `mean_ppd` is the sample average posterior predictive distribution of the outcome variable. It offers us a diagnostic / heuristic and indicates that the sample average posterior predictive distribution is plausible when compared to `mean(y)`, meaning that it can reproduce the sample mean.
+
+For each parameter, `mcse` is Monte Carlo standard error, `n_eff` is a crude measure of effective sample size, and `Rhat` is the potential scale reduction factor on split chains (at convergence `Rhat` = 1). The effective sample size is acceptable (\~ 1000 or more is good). The `Rhat` value also indicates convergence (an `Rhat` of 1 is a good sign, more than 1 could indicate trouble).
+
+# Posterior predictive checks
+
+The pre-compiled models in `rstanarm` already include a `y_rep` variable (our model predictions) in the generated quantities block (your posterior distributions). We can use the `pp_check` function from the `bayesplot` package to see how the model predictions compare to the raw data and if the model is behaving as we expect.
+
+```{r pp_check_hist}
+bayesplot::pp_check(model_availability, plotfun = "stat", stat = "mean")
+```
+
+The histogram shows that the posterior mean (dark blue line) aligns well with the raw data.
+
+```{r pp_check_}
+bayesplot::pp_check(model_availability, plotfun = "dens_overlay")
+```
+
+From the density plot, we can see that overall, the model predictions follow the underlying data. In summary, we can say that this model fit is acceptable.
+
+# Describe Posterior Distributions
+
+Here we compute indices relevant to describe and characterize the posterior distributions. We use `bayestestR::describe_posterior` on `model_availability` as our model of posterior draws.
+
+```{r describe_posterior}
+knitr::kable(bayestestR::describe_posterior(posteriors = model_availability, # default bayestestR parameters listed here (for completeness)
+  centrality = "median", # For the point-estimates (`centrality` indices) to compute, we select the "median".
+  ci = 0.95, # For the type of index used for Credible Interval`ci_method`	we use `95% CI` (0.95). For the  Value or vector of probability of the CI (between 0 and 1) to be estimated. We use `bayestestR` default `ci` vaue of .95 (95%).
+  ci_method = "hdi", # Highest Density Interval (HDI) index used for Credible Interval for uncertainty characterization of posterior distributions.
+  test = c("p_direction", "rope"), # The indices of effect existence to compute,  
+              # p_direction = Probability of Direction aka Maximum Probability of Effect
+              # rope = proportion of the HDI (default to the 89% HDI) of a posterior distribution that lies within a region of practical equivalence.
+  rope_range = "default", # ROPE's lower and higher bounds set to the "default" of x +- 0.1 * SD(response). 
+  rope_ci = 0.95, # The Credible Interval (CI) probability, corresponding to the proportion of HDI, to use for the percentage in ROPE.
+  diagnostic = c("MCSE"), # Diagnostic metrics to compute = Monte Carlo Standard Error.
+  effects = c("all"), # Returns results for for fixed effects and random effects 
+  BF = 1), # The amount of support required to be included in the support interval -> a Bayesian support interval. Consistent with Carnap’s theory of corroboration, the support interval contains only parameter values that receive at least some minimum amount of support from the data. The support interval is not subject to Lindley’s paradox and provides an evidence-based perspective on inference that differs from the belief-based perspective that forms the basis of the standard Bayesian credible interval. https://link.springer.com/article/10.1007/s10670-019-00209-z
+caption = 'Summary of stan_glm regression for Availability response variable')
+```
+
+The `Parameter` indicates the levels of our categorical predictor variables. As with the glm, when dealing with factor variables, our model uses n-1 interactions. For example `Access_Free` (access is easy) is the baseline and `Access_Permission` (access is with permission) will only be used if the `Access` variable = `Access_Permission` (access is with permission). In this model the 'baseline' is the top level of each factor. So the baseline is easy access, harvesting, processing etc. and for plants whose fruits mature across both dry and wet seasons (throughout).
+
+In the table above we show the `median` regression coefficient value of posterior draws.
+
+For the Credible Interval`ci` we chose `95% CI` (0.95). For the value or vector of probability of the CI (between 0 and 1) to be estimated. We show the Highest Density Interval (HDI) index used for Credible Interval in the context of uncertainty characterization of posterior distributions. All points within this interval have a higher probability density than points outside the interval.
+
+`pd` is the Probability of Direction aka Maximum Probability of Effect - MPE. It indicates the probability that the effect of a predictor variable on response variable goes to negative or positive direction. This varies between 50% and 100% (i.e., 0.5 and 1) and can be interpreted as the probability (expressed in percentage) that a parameter (described by its posterior distribution) is strictly positive or negative (whichever is the most probable). It is mathematically defined as the proportion of the posterior distribution that is of the median's sign. Although differently expressed, this index is fairly similar (i.e., is strongly correlated) to the frequentist p-value.
+
+`ROPE` is the proportion of the HDI (default to the 89% HDI) of a posterior distribution that lies within a region of practical equivalence. It is the region of practical equivalence. It allows us to define an area around the null value enclosing values that are equivalent to the null value for practical purposes [@kruschke2010bayesian; @kruschke2011bayesian; @kruschke2014doing]. The ROPE_high and ROPE_low values show us the upper and lower bounds for these values. `% in ROPE` is the proportion of the coefficients within a defined range around zero (no effect),
+
+ROPE is sensitive to the scale of the predictors. It represents a region of practical equivalence to zero, dependent on the scale of the predictors. Percentage in ROPE depend on the unit of its parameter. It represents a fixed portion of the response's scale, its proximity with a coefficient depends on the scale of the coefficient itself.
+
+rope() performs a simple check for pairwise correlations between parameters, but as there can be collinearity between more than two variables, a first step to check the assumptions of this hypothesis testing is to look at different pair plots. An even more sophisticated check is the projection predictive variable selection [@piironen2017comparison].
+
+Strengths: Provides information related to the practical relevance of the effects. 
+
+Limitations: A ROPE range needs to be arbitrarily defined. Sensitive to the scale (the unit) of the predictors. Not sensitive to highly significant effects. -->
+
+`MCSE` is the Monte Carlo Standard Error, an estimate of the inaccuracy of Monte Carlo samples, usually regarding the expectation of posterior samples. The higher the value, the lower the precision.
+
+## Model Posteriors
+
+Here we extract the parameters (i.e., coefficients) of the model.
+
+```{r posteriors}
+posteriors <- insight::get_parameters(model_availability)
+```
+
+The posterior draws are a set of different plausible values for each parameter. These are distributions rather than single values for each effect of the model. Our Bayesian sampling algorithm (e.g., Monte Carlo Markov Chains - MCMC) draws from the hidden true posterior distribution. We can use these to estimate the underlying true posterior distribution. The default `sampling` tool in `rstanarm` used in our model is 4000 draws.
+
+Here I facet_wrap by variables.
+
+```{r}
+posteriors |> gather(key = 'key', value = 'value') |> 
+  ggplot(aes(value, fill = key)) + 
+  geom_density(alpha = 0.6) +
+  facet_wrap(~key) +
+  theme_classic()
+```
+
+
+Here I stack all on single x-axis base. Could be that we have a lot of variables and comparing them needs a lot of effort in color separation skills.
+
+```{r}
+posteriors |> gather(key = 'key', value = 'value') |> 
+  ggplot(aes(value, fill = key)) + 
+  geom_density(alpha = 0.6) +
+  theme_classic()
+```
+
+Here, I adjust the position of the plots and zoom to peaks by setting xlim values.
+
+```{r}
+posteriors |> gather(key = 'key', value = 'value') |> ggplot(aes(value, fill = key)) +
+  geom_density(adjust = 0.4, position = 'fill', alpha = 0.8) + 
+  xlim(-30, 25) + 
+  theme_classic()
+```
+
+A more useful distribution of the posteriors for each of the parameter levels is shown in the plot below:
+
+```{r}
+plot(model_availability, plotfun = 'areas', prob = 0.95) # https://mc-stan.org/rstanarm/reference/stan_glm.html
+```
+
+The same can be shown as bars with whiskers to demarcate the 95% confidence interval.
+
+```{r}
+bayesplot::color_scheme_set("viridis") # https://mc-stan.org/rstanarm/reference/stan_glm.html
+plot(model_availability)
+```
+
+Here, I leave out the intercept and retain only the parameter variables of relevance to the model.
+
+```{r}
+plot(model_availability, 
+     regex_pars = c("Distance", "Harvesting", "Portability", "Processing",
+                    "Seasonality", "Price", "Access", "Adequacy", "Regeneration"))
+```
+
+These distributions represent the probability (the y axis) of different effects (the x axis). The central values are more probable than the extreme values.
+
+# Model priors
+
+We use the default `rstanarm` priors to fit the models. To check on the performance we plot the medians and central intervals comparing parameter draws from the prior and posterior distributions.
+
+```{r priors}
+prior_summary(model_availability)
+posterior_vs_prior(model_availability)
+```
+
+# Partitioning for each community unit
+
+We also ran similar modeling protocols for every community unit separately to find out whether the differences in the communities could be resulting in differences in how the variables contribute to their availability of WEPs perception. *All the code is listed in one chunk per community unit as there is not much differences in the codes used.*
+
+### Nasiger Community Unit
+
+```{r read_data}
+wep_data_nas <- wep_data |> filter(SITE == 'Nasiger') # Filtering data where SITE is Nasiger.
+
+regression_data_factors_nas <- wep_data_nas |> 
+  dplyr::select(-c(SITE, SPECIES)) # Leaving out SITE and SPECIES columns.
+
+availability_vifcor_data_nas <- regression_data_factors_nas |> 
+  dplyr::select(-c(Access, AVAILABILITY)) # Leaving out Access and AVAILABILITY columns. Access had uniform 1 value all through hence brought warning in the vifcor analysis.
+
+availability_vifcor_nas <- regression_data_factors_nas |>
+  dplyr::select(-c(Access, AVAILABILITY)) |> 
+  vifcor(th = 0.7) 
+
+M <- regression_data_factors_nas |>
+  dplyr::select(-c(Access, AVAILABILITY)) |> 
+  cor() # Generating correlation matrix
+
+corrplot(M, method = 'square', diag = FALSE,
+         addCoef.col = 'black', number.cex = 0.9,  type = 'lower')
+
+M <- regression_data_factors_nas |> 
+  dplyr::select(-c(Abundance, Distance, Market:Access, AVAILABILITY)) |> cor() # Generating correlation matrix for non-correlated variables
+
+corrplot(M, method = 'square', diag = FALSE,
+         addCoef.col = 'black', number.cex = 0.9,  type = 'lower') # Non-correlated variables plot
+
+availability_stan_glm_nas <- regression_data_factors_nas |> 
+  dplyr::select(-c(Abundance, Distance, Market:Access)) # Variables for modeling
+
+avail_glm_nas <- regression_data_factors_nas |> dplyr::select(-c(availability_vifcor_nas@excluded, Access))
+avail_glm_nas$Harvesting <- factor(avail_glm_nas$Harvesting, labels = c('_Easy', '_Average', "_Hard"))
+avail_glm_nas$Portability <- factor(avail_glm_nas$Portability, labels = c('_Light', '_Average', "_Heavy"))
+avail_glm_nas$Processing <- factor(avail_glm_nas$Processing, labels = c('_Easy', '_Average', "_Hard"))
+avail_glm_nas$Seasonality <- factor(avail_glm_nas$Seasonality, labels = c('_Both', '_Dry', "_Wet"))
+avail_glm_nas$Adequacy <- factor(avail_glm_nas$Adequacy, labels = c('_Plenty', '_Average', "_Little"))
+avail_glm_nas$Regeneration <- factor(avail_glm_nas$Regeneration, labels = c('_Plenty', '_Little'))
+avail_glm_nas$AVAILABILITY <- factor(avail_glm_nas$AVAILABILITY, labels = c('_YES', '_NO'))
+
+set.seed(456)
+
+model_availability_nas <-
+  rstanarm::stan_glm(AVAILABILITY ~ ., 
+                     family = 'binomial',
+                     data = avail_glm_nas, 
+                     prior = default_prior_coef(family), 
+                     prior_intercept = default_prior_intercept(family),
+                     prior_aux = exponential(autoscale = TRUE),
+                     prior_PD = FALSE)
+
+knitr::kable(describe_posterior(model_availability_nas), caption = 'Summary of stan_glm regression for Availability response variable Nasiger')
+```
+
+At Nasiger, we dropped four variables due to multi-collinearity issues (Price, Abundance, Distance, and Market). We also dropped Access variable since it only had uniform rank of `r unique(wep_data_nas$Access)` hence could not be used in model building. All variables used in the model proved important in explaining availability perception by the Nasiger community towards their `r nrow(wep_data_nas)` WEPs.
+
+### Atala Kamusio
+
+```{r read_atala_data}
+
+wep_data_ata <- wep_data |> filter(SITE == 'Atala Kamusio')
+
+regression_data_factors_ata <- wep_data_ata |> 
+  dplyr::select(-c(SITE, SPECIES, Access))
+
+availability_vifcor_ata <- regression_data_factors_ata |> 
+  dplyr::select(-AVAILABILITY) |> 
+  vifcor(th = 0.7)
+
+M <- regression_data_factors_ata |>  
+  dplyr::select(-AVAILABILITY) |> 
+  cor()
+
+corrplot(M, method = 'square', diag = FALSE,
+         addCoef.col = 'black', number.cex = 0.9,  type = 'lower')
+
+M <- regression_data_factors_ata |>  
+  dplyr::select(-c(Abundance, Adequacy:AVAILABILITY)) |>  
+  cor()
+
+corrplot(M, method = 'square', diag = FALSE,
+         addCoef.col = 'black', number.cex = 0.9,  type = 'lower')
+
+availability_stan_glm_ata <- regression_data_factors_ata |>  
+  dplyr::select(-c(Abundance, Adequacy:Regeneration))
+
+avail_glm_ata <- regression_data_factors_ata |> dplyr::select(-c(availability_vifcor_ata@excluded))
+
+avail_glm_ata$Distance <- factor(avail_glm_ata$Distance, labels = c('_Near', '_Average', "_Far"))
+avail_glm_ata$Harvesting <- factor(avail_glm_ata$Harvesting, labels = c('_Easy', '_Average', "_Hard"))
+avail_glm_ata$Portability <- factor(avail_glm_ata$Portability, labels = c('_Light', '_Average', "_Heavy"))
+avail_glm_ata$Processing <- factor(avail_glm_ata$Processing, labels = c('_Easy', '_Average', "_Hard"))
+avail_glm_ata$Seasonality <- factor(avail_glm_ata$Seasonality, labels = c('_Both', '_Dry', "_Wet"))
+avail_glm_ata$Market <- factor(avail_glm_ata$Market, labels = c('_Plenty', '_Average', '_Little'))
+avail_glm_ata$Price <- factor(avail_glm_ata$Price, labels = c('_Cheap', '_Average', "_Expensive"))
+avail_glm$AVAILABILITY <- factor(avail_glm$AVAILABILITY, labels = c('_YES', '_NO'))
+
+set.seed(789)
+
+model_availability_ata <-
+  rstanarm::stan_glm(AVAILABILITY ~ ., # ?stan_glm and links 
+                     family = 'binomial',
+                     data = avail_glm_ata, 
+                     prior = default_prior_coef(family), 
+                     prior_intercept = default_prior_intercept(family),
+                     prior_aux = exponential(autoscale = TRUE),
+                     prior_PD = FALSE)
+
+knitr::kable(describe_posterior(model_availability_ata), caption = 'Summary of stan_glm regression for Availability response variable Atala Kamusio')
+
+```
+
+At Atala Kamusio, we dropped three variables due to multicollinearity issues (Adequacy, Abundance, and Regeneration). We also dropped Access variable since it only had uniform rank of `r unique(wep_data_ata$Access)` hence could not be used in model building. All variables, however, that got into the model proved important in explaining availability perception by the Nasiger community towards their `r nrow(wep_data_nas)` WEPs. However, we observed low values of `pd` for Harvesting variable (\~54%) indicating that its regression coefficient could almost fall in either negative or positive directions of the median equally. This implies its unstable contribution in perception of the community on whether a WEFP is available or not.
+
+### Lopur
+
+```{r read_wep_data_lop}
+wep_data_lop <- wep_data |> filter(SITE == 'Lopur')
+
+regression_data_factors_lop <- wep_data_lop |>  
+  dplyr::select(-c(SITE:SPECIES)) 
+availability_vifcor_lop <- regression_data_factors_lop |> 
+  dplyr::select(-AVAILABILITY) |>  
+  vifcor(th = 0.7)
+
+M <-  regression_data_factors_lop |>  
+  dplyr::select(-AVAILABILITY) |> 
+  cor()
+
+corrplot(M, method = 'square', diag = FALSE,
+         addCoef.col = 'black', number.cex = 0.9,  type = 'lower')
+
+M <- regression_data_factors_lop |> 
+  dplyr::select(-c(Abundance, Market:Price, AVAILABILITY)) |>  
+  cor()
+
+corrplot(M, method = 'square', diag = FALSE,
+         addCoef.col = 'black', number.cex = 0.9,  type = 'lower')
+
+avail_glm_lop <- regression_data_factors_lop %>% 
+  dplyr::select(-c(Abundance, Market:Price))
+
+avail_glm_lop$Distance <- factor(avail_glm_lop$Distance, labels = c('_Near', '_Average', "_Far"))
+avail_glm_lop$Harvesting <- factor(avail_glm_lop$Harvesting, labels = c('_Easy', '_Average', "_Hard"))
+avail_glm_lop$Portability <- factor(avail_glm_lop$Portability, labels = c('_Light', '_Average', "_Heavy"))
+avail_glm_lop$Processing <- factor(avail_glm_lop$Processing, labels = c('_Easy', '_Average', "_Hard"))
+avail_glm_lop$Seasonality <- factor(avail_glm_lop$Seasonality, labels = c('_Both', '_Dry', "_Wet"))
+avail_glm_lop$Access <- factor(avail_glm_lop$Access, labels = c('_Free', '_Permission'))
+avail_glm_lop$Adequacy <- factor(avail_glm_lop$Adequacy, labels = c('_Plenty', '_Average', "_Little"))
+avail_glm_lop$Regeneration <- factor(avail_glm_lop$Regeneration, labels = c('_Plenty', '_Average', "_Little"))
+avail_glm$AVAILABILITY <- factor(avail_glm$AVAILABILITY, labels = c('_YES', '_NO'))
+
+set.seed(147)
+
+model_availability_lop <-
+  rstanarm::stan_glm(AVAILABILITY ~ ., # ?stan_glm and links 
+                     family = 'binomial',
+                     data = avail_glm_lop, 
+                     prior = default_prior_coef(family), 
+                     prior_intercept = default_prior_intercept(family),
+                     prior_aux = exponential(autoscale = TRUE),
+                     prior_PD = FALSE)
+
+knitr::kable(describe_posterior(model_availability_lop), caption = 'Summary of stan_glm regression for Availability response variable Lopur')
+
+```
+
+Plotting the regression models together
+
+```{r}
+p_all <- plot(model_availability, regex_pars = c("Distance", "Harvesting", "Portability", "Processing",
+                    "Seasonality", "Price", "Access", "Adequacy", "Regeneration")) + theme(axis.text = element_text(color = 'black'))
+
+p_nas <- plot(model_availability_nas, regex_pars = c("Harvesting", "Portability", "Processing",
+                    "Seasonality", "Adequacy", "Regeneration")) + theme(axis.text = element_text(color = 'black'))
+
+p_ata <- plot(model_availability_ata, regex_pars = c("Distance", "Harvesting", "Portability", "Processing", "Seasonality", "Market", "Price")) + theme(axis.text = element_text(color = 'black'))
+
+p_lop <- plot(model_availability_lop, regex_pars = c("Distance", "Harvesting", "Portability", "Processing", "Seasonality", "Access", "Adequacy", "Regeneration")) + theme(axis.text = element_text(color = 'black'))
+
+patch <- (p_all | p_nas) / (p_ata | p_lop)
+
+png(filename = "output/model_availability.png",
+    width = 4800, height = 5600, units = "px", pointsize = 12,
+    bg = "white", res = 600, family = "", restoreConsole = TRUE,
+    type = c("windows", "cairo", "cairo-png"),
+    symbolfamily="default")
+patch + plot_annotation(tag_levels = 'A')
+dev.off()
+```
+
+At Lopur, we dropped three variables due to multicollinearity issues (Market, Abundance, and Price). All variables, however, that got into the model proved important in explaining availability perception by the Nasiger community towards their `r nrow(wep_data_nas)` WEPs. However, we observed low values of `pd` for Harvesting, Portability, and Processing variables (\~50%) indicating that their regression coefficients could almost fall in either negative or positive directions of the median equally. This implies their unstable contribution in perception of the community on whether a WEFP is available or not.
+
+Even though we noted overall contribution of the studied variables to be important in explaining perception of the communities towards availability of their WEPs, when checked separately, Harvesting, Portability, and Processing became unstable. It is also important to note that number of records used in the model varied with `r nrow(wep_data)` records for the overall model, `r nrow(wep_data_nas)` records for Nasiger, `r nrow(wep_data_ata)` records for Atala Kamusio, and `r nrow(wep_data_lop)` records for Lopur. Further, muticollinearity tests dropped different variables across all models with overall model dropping (`r availability_vifcor@excluded`), Nasiger dropping (`r availability_vifcor_nas@excluded`), Atala Kamusio dropping (`r availability_vifcor_ata@excluded`), and Lopur dropping (`r availability_vifcor_lop@excluded`). In addition, at both Nasiger and Atala Kamusio, we did not use Access variable as it only had uniform rank value of `r unique(wep_data_ata$Access)` throughout the either of the datasets.
+
+## All model outputs
+
+Here are the model output tables for the overall model and those of specific community units.
+
+```{r describe_posterior_each_community}
+knitr::kable(describe_posterior(model_availability), caption = 'Summary of stan_glm regression for Availability response variable')
+knitr::kable(describe_posterior(model_availability_nas), caption = 'Summary of stan_glm regression for Availability response variable Nasiger')
+knitr::kable(describe_posterior(model_availability_ata), caption = 'Summary of stan_glm regression for Availability response variable Atala Kamusio')
+knitr::kable(describe_posterior(model_availability_lop), caption = 'Summary of stan_glm regression for Availability response variable Lopur')
+```
+
+## Additional plot outputs
+
+Here we plot posterior distributions of the effects. Refer [Modern Statistics with R](http://www.modernstatisticswithr.com/regression.html#bayeslm)
+
+```{r plot_model_availability}
+plot(model_availability, "dens", pars = names(coef(model_availability)))
+```
+
+To get 95% credible intervals for the effects, we can use `posterior_interval`.
+
+```{r plot_posterior_interval}
+plot(model_availability, "intervals",
+        pars = names(coef(model_availability)),
+        prob = 0.95)
+```
+
+Finally, we can use `rhat` to check model convergence. It should be less than 1.1 if the fitting has converged:
+
+```{r plot_model_availability_rhat}
+plot(model_availability, "rhat")
+```
+
+We can plot the residuals against the fitted values to look for signs of non-linearity, adding a curve for visual inspection.
+
+```{r model_diag}
+model_diag <- data.frame(Fitted = predict(model_availability),
+                         Residual = residuals(model_availability))
+
+ggplot(model_diag, aes(Fitted, Residual)) +
+      geom_point() +
+      geom_smooth(se = TRUE)
+```
+
+```{r pp_check}
+pp_check(model_availability, nreps = 20)
+```
+
+```{r pp_check_stat_grouped}
+pp_check(model_availability, plotfun = "stat_grouped", stat = "median",
+         group = factor(wep_data$SPECIES))
+```
+
+```{r bayesplot}
+bayesplot::color_scheme_set('purple')
+pairs(model_availability, pars = c('(Intercept)', 'log-posterior'))
+```
+
+```{r pairs}
+pairs(model_availability, pars = c('Distance_Average', 'Seasonality_Wet', "log-posterior"))
+
+```
+
+```{r}
+pairs(
+  model_availability,
+  pars = c("(Intercept)", "Seasonality_Dry", "Distance_Far", "log-posterior"),
+ # transformations = list(Distance3 = "log"),
+  off_diag_args = list(size = 3/4, alpha = 1/10), # size and transparency of scatterplot points
+  np_style = pairs_style_np(div_color = "black", div_shape = 2) # color and shape of the divergences
+)
+```
+
+```{r}
+print(model_availability) # Print method for the model
+```
+
+```{r}
+bayesplot::color_scheme_set('teal')
+plot(model_availability, 'hist')
+```
+
+# References

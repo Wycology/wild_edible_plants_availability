@@ -1,0 +1,50 @@
+SITE,SPECIES,Abundance,Distance,Harvesting,Portability,Processing,Seasonality,Market,Price,Access,Adequacy,Regeneration,AVAILABILITY
+Nasiger,Ziziphus mauritiana,1,1,1,1,1,2,3,1,1,3,3,1
+Nasiger,Salvadora persica,1,1,1,1,1,2,3,1,1,3,3,1
+Nasiger,Balanites rotundifolia,2,1,1,3,3,1,3,1,1,3,1,1
+Nasiger,Dobera glabra,1,2,1,3,1,1,3,1,1,3,3,1
+Nasiger,Cordia sinensis,1,1,1,1,1,1,1,1,1,1,1,1
+Nasiger,Hyphaene compressa,2,2,3,3,2,1,2,2,1,3,3,1
+Nasiger,Boscia coriacea,3,3,2,2,3,3,1,3,1,1,1,0
+Nasiger,Balanites pedicellaris,3,3,3,3,1,3,1,3,1,3,1,0
+Nasiger,Acacia tortilis,1,1,2,1,1,2,3,1,1,3,3,1
+Nasiger,Grewia tenax,3,3,3,2,2,3,1,3,1,1,1,0
+Nasiger,Vatovaea pseudolablab,2,3,3,3,2,3,1,3,1,2,3,0
+Nasiger,Berchemia discolor,3,3,2,3,3,3,2,2,1,1,3,0
+Nasiger,Sterculia stenocarpa,3,3,3,1,3,3,1,3,1,1,1,0
+Atala Kamusio,Ziziphus mauritiana,1,1,1,1,1,2,3,1,1,3,3,1
+Atala Kamusio,Salvadora persica,2,3,1,1,1,2,3,1,1,3,3,1
+Atala Kamusio,Balanites rotundifolia,1,1,1,3,3,2,3,1,1,3,1,1
+Atala Kamusio,Balanites pedicellaris,1,1,1,3,1,2,3,1,1,3,3,1
+Atala Kamusio,Boscia coriacea,3,3,1,2,3,3,1,3,1,1,3,0
+Atala Kamusio,Dobera glabra,1,1,1,2,1,1,1,3,1,2,2,1
+Atala Kamusio,Grewia tenax,3,2,3,3,3,2,1,3,1,1,1,0
+Atala Kamusio,Acacia tortilis,1,1,2,1,1,2,3,1,1,3,3,1
+Atala Kamusio,Grewia bicolor,3,2,3,3,3,1,1,2,1,1,1,1
+Atala Kamusio,Acacia senegal,3,3,3,3,3,3,1,2,1,1,1,0
+Atala Kamusio,Acacia nubica,3,3,3,3,2,1,1,2,1,1,1,0
+Atala Kamusio,Sterculia stenocarpa,2,3,3,3,3,2,3,3,1,2,1,1
+Atala Kamusio,Grewia villosa,3,3,3,3,3,3,1,1,1,1,1,0
+Atala Kamusio,Ficus sycomorus,3,2,3,3,3,1,1,2,1,1,1,0
+Atala Kamusio,Berchemia discolor,1,1,3,2,3,1,2,2,1,2,1,1
+Atala Kamusio,Cenchrus cilliaris,3,3,1,3,3,1,1,1,1,1,1,0
+Atala Kamusio,Lannea triphyla,3,3,3,3,3,1,1,3,1,1,1,0
+Atala Kamusio,Balanites aegyptiaca,3,3,3,3,3,1,2,1,1,1,1,0
+Atala Kamusio,Maerua subcordata,3,2,3,3,3,1,1,3,1,1,1,0
+Atala Kamusio,Grewia fallax/mollis,1,1,3,1,3,2,2,1,1,3,1,1
+Atala Kamusio,Vatovaea pseudolablab,3,3,3,3,3,1,1,1,1,1,1,0
+Atala Kamusio,Tamarindus indica,2,2,3,3,3,1,1,2,1,1,1,0
+Atala Kamusio,Cordia sinensis,2,2,3,3,3,2,3,3,1,3,3,1
+Lopur,Ziziphus mauritiana,1,1,1,1,1,2,3,1,1,3,3,1
+Lopur,Salvadora persica,1,1,1,1,1,2,3,1,1,3,3,1
+Lopur,Balanites rotundifolia,2,1,1,3,3,2,3,1,1,3,1,1
+Lopur,Dobera glabra,1,1,1,3,1,2,3,1,1,3,3,1
+Lopur,Maerua subcordata,3,3,3,1,3,2,2,3,1,3,1,0
+Lopur,Balanites pedicellaris,2,1,2,1,3,2,2,3,1,3,1,1
+Lopur,Boscia coriacea,3,3,2,3,3,3,2,3,1,1,1,0
+Lopur,Tamarindus indica,2,3,1,3,1,3,3,2,2,2,2,0
+Lopur,Acacia tortilis,1,1,2,1,1,2,3,1,1,3,3,1
+Lopur,Cordia sinensis,2,2,1,2,2,2,3,2,1,3,1,1
+Lopur,Grewia tenax,3,3,2,2,1,1,1,3,1,2,1,0
+Lopur,Grewia villosa,2,3,2,3,1,3,1,3,1,1,1,0
+Lopur,Vatovaea pseudolablab,2,3,3,2,1,3,1,3,1,3,1,0
