@@ -108,8 +108,10 @@ To visualize the correlation values among the predictor variables, we used `corr
 
 ```{r availability_corrplot_before}
 cor_matrix <- regression_data_factors %>% dplyr::select(-AVAILABILITY) %>% cor()
+png("output/supplementary_figure_2.png", units = "cm", width = 15, height = 15, res = 800)
 corrplot(cor_matrix, method = 'square', diag = FALSE, 
-         addCoef.col = 'black', number.cex = 0.9,  type = 'lower')
+         addCoef.col = 'black', number.cex = 0.8,  type = 'lower', tl.col = "black")
+dev.off()
 ```
 
 None of the remaining variables had correlations \>= \|0.7\| as indicated in the following plot.
@@ -118,8 +120,10 @@ None of the remaining variables had correlations \>= \|0.7\| as indicated in the
 cor_matrix_cleaned <- regression_data_factors |>  
   dplyr::select(-c(availability_vifcor@excluded, AVAILABILITY)) |> cor()
 
+png("output/supplementary_figure_3.png", units = "cm", width = 15, height = 15, res = 800)
 corrplot(cor_matrix_cleaned, method = 'square', diag = FALSE, 
-         addCoef.col = 'black', number.cex = 0.9,  type = 'lower')
+         addCoef.col = 'black', number.cex = 0.9,  type = 'lower', tl.col = "black")
+dev.off()
 ```
 
 In preparation for the data to run `stan_glm`, we converted both predictor and response variables into factors so that the function could run them as categories and not numeric. I have set **Access** variable to only two levels as that is what is available in the data-set.
@@ -497,18 +501,18 @@ Plotting the regression models together
 
 ```{r}
 p_all <- plot(model_availability, regex_pars = c("Distance", "Harvesting", "Portability", "Processing",
-                    "Seasonality", "Price", "Access", "Adequacy", "Regeneration")) + theme(axis.text = element_text(color = 'black'))
+                    "Seasonality", "Price", "Access", "Adequacy", "Regeneration")) + theme(axis.text = element_text(color = 'black')) + theme_classic()
 
 p_nas <- plot(model_availability_nas, regex_pars = c("Harvesting", "Portability", "Processing",
-                    "Seasonality", "Adequacy", "Regeneration")) + theme(axis.text = element_text(color = 'black'))
+                    "Seasonality", "Adequacy", "Regeneration")) + theme(axis.text = element_text(color = 'black')) + theme_classic()
 
-p_ata <- plot(model_availability_ata, regex_pars = c("Distance", "Harvesting", "Portability", "Processing", "Seasonality", "Market", "Price")) + theme(axis.text = element_text(color = 'black'))
+p_ata <- plot(model_availability_ata, regex_pars = c("Distance", "Harvesting", "Portability", "Processing", "Seasonality", "Market", "Price")) + theme(axis.text = element_text(color = 'black')) + theme_classic()
 
-p_lop <- plot(model_availability_lop, regex_pars = c("Distance", "Harvesting", "Portability", "Processing", "Seasonality", "Access", "Adequacy", "Regeneration")) + theme(axis.text = element_text(color = 'black'))
+p_lop <- plot(model_availability_lop, regex_pars = c("Distance", "Harvesting", "Portability", "Processing", "Seasonality", "Access", "Adequacy", "Regeneration")) + theme(axis.text = element_text(color = 'black')) + theme_classic()
 
 patch <- (p_all | p_nas) / (p_ata | p_lop)
 
-png(filename = "output/model_availability.png",
+png(filename = "output/Fig_2.png",
     width = 4800, height = 5600, units = "px", pointsize = 12,
     bg = "white", res = 600, family = "", restoreConsole = TRUE,
     type = c("windows", "cairo", "cairo-png"),
